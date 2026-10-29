@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MSFS 2024 Flight Analytics</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #09090b;
+      color: #f4f4f5;
+    }
+    .glass-card {
+      background: rgba(24, 24, 27, 0.75);
+      border: 1px solid rgba(63, 63, 70, 0.4);
+      backdrop-filter: blur(12px);
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #18181b;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #3f3f46;
+      border-radius: 3px;
+    }
+    input[type="date"]::-webkit-calendar-picker-indicator,
+    input[type="month"]::-webkit-calendar-picker-indicator {
+      filter: invert(0.8);
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col custom-scrollbar">
+
+  <!-- Header -->
+  <header class="border-b border-zinc-800 bg-zinc-950/80 sticky top-0 z-50 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="p-2 bg-zinc-100 text-zinc-950 rounded-lg">
+          <i data-lucide="plane-takeoff" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-lg text-white tracking-wide">MSFS2024 ANALYTICS</h1>
+          <p class="text-xs text-zinc-400">Flight Logbook & Executive Dashboard</p>
+        </div>
+      </div>
+      
+      <div class="flex items-center gap-4">
+        <div id="connectionStatus" class="flex items-center gap-2 text-xs px-3 py-1.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400">
+          <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse" id="statusDot"></span>
+          <span id="statusText">Conectando a Firebase...</span>
+        </div>
+        <button id="reloadBtn" class="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+    <!-- Charts Grid -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      <!-- Chart 1: Horas al Día -->
+      <div class="glass-card p-5 rounded-xl flex flex-col justify-between">
+        <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
+          <div>
+            <h2 class="text-base font-semibold text-white">Horas de Vuelo por Día</h2>
+            <p class="text-xs text-zinc-400">Tiempo total volado agregados diariamente</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="toggleDayPickerBtn" class="flex items-center gap-1.5 text-xs px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-zinc-200 transition">
+              <i data-lucide="calendar" class="w-3.5 h-3.5"></i>
+              <span>Filtrar Días</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="dayPickerPanel" class="hidden mb-4 p-3 bg-zinc-900/90 border border-zinc-800 rounded-lg flex flex-wrap items-center gap-3 text-xs">
+          <div class="flex items-center gap-1.5">
+            <span class="text-zinc-400">Desde:</span>
+            <input type="date" id="dayStartInput" class="bg-zinc-950 border border-zinc-700 text-zinc-200 rounded px-2 py-1 focus:outline-none focus:border-zinc-500">
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="text-zinc-400">Hasta:</span>
+            <input type="date" id="dayEndInput" class="bg-zinc-950 border border-zinc-700 text-zinc-200 rounded px-2 py-1 focus:outline-none focus:border-zinc-500">
+          </div>
+          <button id="resetDayFilterBtn" class="text-xs text-zinc-400 hover:text-white underline ml-auto">Restablecer todo</button>
+        </div>
+
+        <div class="relative h-64 w-full">
+          <canvas id="chartHoursPerDay"></canvas>
+        </div>
+      </div>
+
+      <!-- Chart 2: Horas al Mes -->
+      <div class="glass-card p-5 rounded-xl flex flex-col justify-between">
+        <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
+          <div>
+            <h2 class="text-base font-semibold text-white">Horas de Vuelo por Mes</h2>
+            <p class="text-xs text-zinc-400">Acumulado mensual de horas en simulación</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="toggleMonthPickerBtn" class="flex items-center gap-1.5 text-xs px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-zinc-200 transition">
+              <i data-lucide="calendar-range" class="w-3.5 h-3.5"></i>
+              <span>Filtrar Meses</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="monthPickerPanel" class="hidden mb-4 p-3 bg-zinc-900/90 border border-zinc-800 rounded-lg flex flex-wrap items-center gap-3 text-xs">
+          <div class="flex items-center gap-1.5">
+            <span class="text-zinc-400">Desde:</span>
+            <input type="month" id="monthStartInput" class="bg-zinc-950 border border-zinc-700 text-zinc-200 rounded px-2 py-1 focus:outline-none focus:border-zinc-500">
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="text-zinc-400">Hasta:</span>
+            <input type="month" id="monthEndInput" class="bg-zinc-950 border border-zinc-700 text-zinc-200 rounded px-2 py-1 focus:outline-none focus:border-zinc-500">
+          </div>
+          <button id="resetMonthFilterBtn" class="text-xs text-zinc-400 hover:text-white underline ml-auto">Restablecer todo</button>
+        </div>
+
+        <div class="relative h-64 w-full">
+          <canvas id="chartHoursPerMonth"></canvas>
+        </div>
+      </div>
+
+      <!-- Chart 3: Vuelos al Día -->
+      <div class="glass-card p-5 rounded-xl flex flex-col justify-between">
+        <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
+          <div>
+            <h2 class="text-base font-semibold text-white">Frecuencia de Vuelos por Día</h2>
+            <p class="text-xs text-zinc-400">Cantidad de operaciones realizadas diariamente</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="toggleFlightsDayPickerBtn" class="flex items-center gap-1.5 text-xs px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-zinc-200 transition">
+              <i data-lucide="calendar" class="w-3.5 h-3.5"></i>
+              <span>Filtrar Días</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="flightsDayPickerPanel" class="hidden mb-4 p-3 bg-zinc-900/90 border border-zinc-800 rounded-lg flex flex-wrap items-center gap-3 text-xs">
+          <div class="flex items-center gap-1.5">
+            <span class="text-zinc-400">Desde:</span>
+            <input type="date" id="flightsDayStartInput" class="bg-zinc-950 border border-zinc-700 text-zinc-200 rounded px-2 py-1 focus:outline-none focus:border-zinc-500">
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="text-zinc-400">Hasta:</span>
+            <input type="date" id="flightsDayEndInput" class="bg-zinc-950 border border-zinc-700 text-zinc-200 rounded px-2 py-1 focus:outline-none focus:border-zinc-500">
+          </div>
+          <button id="resetFlightsDayFilterBtn" class="text-xs text-zinc-400 hover:text-white underline ml-auto">Restablecer todo</button>
+        </div>
+
+        <div class="relative h-64 w-full">
+          <canvas id="chartFlightsPerDay"></canvas>
+        </div>
+      </div>
+
+      <!-- Chart 4: Vuelos por Aerolínea -->
+      <div class="glass-card p-5 rounded-xl flex flex-col justify-between">
+        <div class="flex justify-between items-center mb-4">
+          <div>
+            <h2 class="text-base font-semibold text-white">Distribución por Aerolínea</h2>
+            <p class="text-xs text-zinc-400">Proporción de vuelos completados por compañía</p>
+          </div>
+          <span class="text-xs px-2.5 py-1 bg-zinc-900 border border-zinc-800 rounded text-zinc-400">Aerolínea</span>
+        </div>
+        <div class="relative h-64 w-full flex items-center justify-center">
+          <canvas id="chartFlightsByAirline"></canvas>
+        </div>
+      </div>
+
+      <!-- Chart 5: Tendencia de Uso de Aeronaves -->
+      <div class="glass-card p-5 rounded-xl lg:col-span-2 flex flex-col justify-between">
+        <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
+          <div>
+            <h2 class="text-base font-semibold text-white">Tendencia de Uso de Aeronaves</h2>
+            <p class="text-xs text-zinc-400">Evolución acumulada de veces utilizadas a lo largo del tiempo</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="toggleAircraftSelectorBtn" class="flex items-center gap-1.5 text-xs px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-zinc-200 transition">
+              <i data-lucide="plane" class="w-3.5 h-3.5"></i>
+              <span>Seleccionar Aeronaves</span>
+            </button>
+            <button id="toggleAircraftDayPickerBtn" class="flex items-center gap-1.5 text-xs px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-zinc-200 transition">
+              <i data-lucide="calendar" class="w-3.5 h-3.5"></i>
+              <span>Filtrar Días</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="aircraftSelectorPanel" class="hidden mb-4 p-3 bg-zinc-900/90 border border-zinc-800 rounded-lg space-y-3 text-xs">
+          <div class="flex justify-between items-center pb-2 border-b border-zinc-800">
+            <span class="font-medium text-zinc-300">Aeronaves activas en gráfico:</span>
+            <div class="flex gap-2">
+              <button id="selectAllAircraftTrendBtn" class="text-zinc-400 hover:text-white underline">Todas</button>
+              <button id="deselectAllAircraftTrendBtn" class="text-zinc-400 hover:text-white underline">Ninguna</button>
+            </div>
+          </div>
+          <div id="aircraftTrendPillContainer" class="flex flex-wrap gap-2 pt-1"></div>
+        </div>
+
+        <div id="aircraftDayPickerPanel" class="hidden mb-4 p-3 bg-zinc-900/90 border border-zinc-800 rounded-lg flex flex-wrap items-center gap-3 text-xs">
+          <div class="flex items-center gap-1.5">
+            <span class="text-zinc-400">Desde:</span>
+            <input type="date" id="aircraftDayStartInput" class="bg-zinc-950 border border-zinc-700 text-zinc-200 rounded px-2 py-1 focus:outline-none focus:border-zinc-500">
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="text-zinc-400">Hasta:</span>
+            <input type="date" id="aircraftDayEndInput" class="bg-zinc-950 border border-zinc-700 text-zinc-200 rounded px-2 py-1 focus:outline-none focus:border-zinc-500">
+          </div>
+          <button id="resetAircraftDayFilterBtn" class="text-xs text-zinc-400 hover:text-white underline ml-auto">Restablecer todo</button>
+        </div>
+
+        <div class="relative h-72 w-full">
+          <canvas id="chartAircraftUsageTrend"></canvas>
+        </div>
+      </div>
+
+      <!-- Chart 6: Evolución de Notas de Aterrizaje -->
+      <div class="glass-card p-5 rounded-xl lg:col-span-2 flex flex-col justify-between">
+        <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
+          <div>
+            <h2 class="text-base font-semibold text-white">Evolución de Calificación de Aterrizaje</h2>
+            <p class="text-xs text-zinc-400">Evolución temporal de la nota de aterrizaje (sobre 10) por tipo de flota</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="px-3 py-1 bg-zinc-900 border border-zinc-800 rounded-lg flex items-center gap-2">
+              <span class="text-xs text-zinc-400">Nota Media:</span>
+              <span id="avgLandingBadge" class="text-sm font-bold text-zinc-100">-- / 10</span>
+            </div>
+            <button id="toggleLandingAircraftSelectorBtn" class="flex items-center gap-1.5 text-xs px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-zinc-200 transition">
+              <i data-lucide="plane" class="w-3.5 h-3.5"></i>
+              <span>Seleccionar Aeronaves</span>
+            </button>
+            <button id="toggleLandingDayPickerBtn" class="flex items-center gap-1.5 text-xs px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-zinc-200 transition">
+              <i data-lucide="calendar" class="w-3.5 h-3.5"></i>
+              <span>Filtrar Días</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="landingAircraftSelectorPanel" class="hidden mb-4 p-3 bg-zinc-900/90 border border-zinc-800 rounded-lg space-y-3 text-xs">
+          <div class="flex justify-between items-center pb-2 border-b border-zinc-800">
+            <span class="font-medium text-zinc-300">Aeronaves activas en gráfico:</span>
+            <div class="flex gap-2">
+              <button id="selectAllLandingTrendBtn" class="text-zinc-400 hover:text-white underline">Todas</button>
+              <button id="deselectAllLandingTrendBtn" class="text-zinc-400 hover:text-white underline">Ninguna</button>
+            </div>
+          </div>
+          <div id="landingTrendPillContainer" class="flex flex-wrap gap-2 pt-1"></div>
+        </div>
+
+        <div id="landingDayPickerPanel" class="hidden mb-4 p-3 bg-zinc-900/90 border border-zinc-800 rounded-lg flex flex-wrap items-center gap-3 text-xs">
+          <div class="flex items-center gap-1.5">
+            <span class="text-zinc-400">Desde:</span>
+            <input type="date" id="landingDayStartInput" class="bg-zinc-950 border border-zinc-700 text-zinc-200 rounded px-2 py-1 focus:outline-none focus:border-zinc-500">
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="text-zinc-400">Hasta:</span>
+            <input type="date" id="landingDayEndInput" class="bg-zinc-950 border border-zinc-700 text-zinc-200 rounded px-2 py-1 focus:outline-none focus:border-zinc-500">
+          </div>
+          <button id="resetLandingDayFilterBtn" class="text-xs text-zinc-400 hover:text-white underline ml-auto">Restablecer todo</button>
+        </div>
+
+        <div class="relative h-72 w-full">
+          <canvas id="chartLandingRateTrend"></canvas>
+        </div>
+      </div>
+
+      <!-- Chart 7: Total de Vuelos por País (Con Top 10 + Desplegable Extra) -->
+      <div class="glass-card p-5 rounded-xl flex flex-col justify-between">
+        <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
+          <div>
+            <h2 class="text-base font-semibold text-white">Total de Vuelos por País</h2>
+            <p class="text-xs text-zinc-400">Top 10 países con más operaciones + adicionales seleccionables</p>
+          </div>
+          
+          <button id="toggleCountrySelectorBtn" class="flex items-center gap-1.5 text-xs px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-zinc-200 transition">
+            <i data-lucide="globe-2" class="w-3.5 h-3.5"></i>
+            <span>Añadir Países Extra</span>
+          </button>
+        </div>
+
+        <!-- Panel Desplegable Estético para Países Adicionales -->
+        <div id="countrySelectorPanel" class="hidden mb-4 p-3 bg-zinc-900/90 border border-zinc-800 rounded-lg space-y-3 text-xs">
+          <div class="flex justify-between items-center pb-2 border-b border-zinc-800">
+            <span class="font-medium text-zinc-300">Países adicionales para mostrar en la gráfica:</span>
+            <div class="flex gap-2">
+              <button id="selectAllExtraCountriesBtn" class="text-zinc-400 hover:text-white underline">Todos</button>
+              <button id="deselectAllExtraCountriesBtn" class="text-zinc-400 hover:text-white underline">Ninguno</button>
+            </div>
+          </div>
+          <div id="countryExtraPillContainer" class="flex flex-wrap gap-2 pt-1">
+            <!-- Renderizado dinámico de países fuera del top 10 -->
+          </div>
+        </div>
+
+        <div class="relative h-72 w-full">
+          <canvas id="chartFlightsByCountry"></canvas>
+        </div>
+      </div>
+
+      <!-- Chart 8: Top 3 Países por Aeronave (Filtrado para A320, A321, ATR42, ATR72, B737) -->
+      <div class="glass-card p-5 rounded-xl flex flex-col justify-between">
+        <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
+          <div>
+            <h2 class="text-base font-semibold text-white">Top 3 Países más Frecuentados por Aeronave</h2>
+            <p class="text-xs text-zinc-400">Flota seleccionada: A320, A321, ATR42, ATR72 y B737</p>
+          </div>
+          <span class="text-xs px-2.5 py-1 bg-zinc-900 border border-zinc-800 rounded text-zinc-400">Top 3 Destinos</span>
+        </div>
+
+        <div class="relative h-72 w-full">
+          <canvas id="chartTopCountriesPerAircraft"></canvas>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Firebase Modular Imports -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDmhNjroy1OBF37plejf3lLMkTvI0pi6tY",
+      authDomain: "msfsapp-f0dbf.firebaseapp.com",
+      databaseURL: "https://msfsapp-f0dbf-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "msfsapp-f0dbf",
+      storageBucket: "msfsapp-f0dbf.firebasestorage.app",
+      messagingSenderId: "307569143951",
+      appId: "1:307569143951:web:5c3b97b90bf658268b40fa"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    let rawFlights = [];
+    let airportsData = {};
+    let chartInstances = {};
+
+    const countryPrefixes = {
+      "EH": "Países Bajos",
+      "LE": "España",
+      "GC": "España (Canarias)",
+	  "GE": "España (Ceuta y Melilla)",
+      "EG": "Reino Unido",
+      "LF": "Francia",
+      "ED": "Alemania",
+      "ET": "Alemania",
+      "LP": "Portugal",
+      "LI": "Italia",
+      "LS": "Suiza",
+      "EB": "Bélgica",
+      "EH": "Países Bajos",
+      "EK": "Dinamarca",
+      "ES": "Suecia",
+      "EF": "Finlandia",
+      "LO": "Austria",
+      "LK": "República Checa",
+      "LH": "Hungría",
+      "EP": "Polonia",
+      "LG": "Grecia",
+      "LT": "Turquía",
+      "KS": "EE.UU.",
+      "KJ": "EE.UU.",
+      "CY": "Canadá",
+      "MM": "México",
+      "SP": "Perú",
+      "SA": "Argentina",
+      "SB": "Brasil",
+      "OM": "Emiratos Árabes Unidos",
+      "RJ": "Japón",
+      "YM": "Australia",
+      "TJ": "Puerto Rico",
+      "SC": "Chile",
+      "SV": "Venezuela"
+    };
+
+    let selectedTrendAircrafts = new Set();
+    let selectedLandingAircrafts = new Set();
+    let selectedExtraCountries = new Set();
+    let isFiltersInitialized = false;
+
+    let minDateAvailable = "";
+    let maxDateAvailable = "";
+    let minMonthAvailable = "";
+    let maxMonthAvailable = "";
+
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+
+    const toggleDayPickerBtn = document.getElementById('toggleDayPickerBtn');
+    const dayPickerPanel = document.getElementById('dayPickerPanel');
+    const dayStartInput = document.getElementById('dayStartInput');
+    const dayEndInput = document.getElementById('dayEndInput');
+    const resetDayFilterBtn = document.getElementById('resetDayFilterBtn');
+
+    const toggleMonthPickerBtn = document.getElementById('toggleMonthPickerBtn');
+    const monthPickerPanel = document.getElementById('monthPickerPanel');
+    const monthStartInput = document.getElementById('monthStartInput');
+    const monthEndInput = document.getElementById('monthEndInput');
+    const resetMonthFilterBtn = document.getElementById('resetMonthFilterBtn');
+
+    const toggleFlightsDayPickerBtn = document.getElementById('toggleFlightsDayPickerBtn');
+    const flightsDayPickerPanel = document.getElementById('flightsDayPickerPanel');
+    const flightsDayStartInput = document.getElementById('flightsDayStartInput');
+    const flightsDayEndInput = document.getElementById('flightsDayEndInput');
+    const resetFlightsDayFilterBtn = document.getElementById('resetFlightsDayFilterBtn');
+
+    const toggleAircraftDayPickerBtn = document.getElementById('toggleAircraftDayPickerBtn');
+    const aircraftDayPickerPanel = document.getElementById('aircraftDayPickerPanel');
+    const aircraftDayStartInput = document.getElementById('aircraftDayStartInput');
+    const aircraftDayEndInput = document.getElementById('aircraftDayEndInput');
+    const resetAircraftDayFilterBtn = document.getElementById('resetAircraftDayFilterBtn');
+
+    const toggleLandingDayPickerBtn = document.getElementById('toggleLandingDayPickerBtn');
+    const landingDayPickerPanel = document.getElementById('landingDayPickerPanel');
+    const landingDayStartInput = document.getElementById('landingDayStartInput');
+    const landingDayEndInput = document.getElementById('landingDayEndInput');
+    const resetLandingDayFilterBtn = document.getElementById('resetLandingDayFilterBtn');
+
+    const toggleAircraftSelectorBtn = document.getElementById('toggleAircraftSelectorBtn');
+    const aircraftSelectorPanel = document.getElementById('aircraftSelectorPanel');
+    const aircraftTrendPillContainer = document.getElementById('aircraftTrendPillContainer');
+
+    const toggleLandingAircraftSelectorBtn = document.getElementById('toggleLandingAircraftSelectorBtn');
+    const landingAircraftSelectorPanel = document.getElementById('landingAircraftSelectorPanel');
+    const landingTrendPillContainer = document.getElementById('landingTrendPillContainer');
+    const avgLandingBadge = document.getElementById('avgLandingBadge');
+
+    const toggleCountrySelectorBtn = document.getElementById('toggleCountrySelectorBtn');
+    const countrySelectorPanel = document.getElementById('countrySelectorPanel');
+    const countryExtraPillContainer = document.getElementById('countryExtraPillContainer');
+
+    lucide.createIcons();
+
+    Chart.defaults.color = '#71717a';
+    Chart.defaults.borderColor = '#27272a';
+    Chart.defaults.font.family = 'Inter, sans-serif';
+
+    const COLOR_PALETTE = [
+      '#ffffff', '#d4d4d8', '#94a3b8', '#e2e8f0', '#64748b',
+      '#f8fafc', '#cbd5e1', '#475569', '#e4e4e7', '#71717a'
+    ];
+
+    function parseLandingRate(rateStr) {
+      if (!rateStr) return null;
+      if (typeof rateStr === 'number') return rateStr;
+      const match = rateStr.toString().match(/([\d.]+)\s*\/\s*10/);
+      if (match) return parseFloat(match[1]);
+      const val = parseFloat(rateStr);
+      return isNaN(val) ? null : val;
+    }
+
+    function formatDecimalHours(decimalVal) {
+      const totalMinutes = Math.round(parseFloat(decimalVal || 0) * 60);
+      const h = Math.floor(totalMinutes / 60);
+      const m = totalMinutes % 60;
+      return `${h}h ${m}m`;
+    }
+
+    function getCountryFromICAO(icaoRaw) {
+      if (!icaoRaw) return 'Desconocido';
+      const cleanIcao = icaoRaw.toString().trim().toUpperCase();
+      if (!cleanIcao) return 'Desconocido';
+
+      const sortedKeys = Object.keys(countryPrefixes).sort((a, b) => b.length - a.length);
+
+      for (const key of sortedKeys) {
+        if (cleanIcao.startsWith(key)) {
+          return countryPrefixes[key];
+        }
+      }
+
+      const p2 = cleanIcao.substring(0, 2);
+      return `Otros (${p2})`;
+    }
+
+    toggleDayPickerBtn.addEventListener('click', () => dayPickerPanel.classList.toggle('hidden'));
+    toggleMonthPickerBtn.addEventListener('click', () => monthPickerPanel.classList.toggle('hidden'));
+    toggleFlightsDayPickerBtn.addEventListener('click', () => flightsDayPickerPanel.classList.toggle('hidden'));
+    toggleAircraftDayPickerBtn.addEventListener('click', () => aircraftDayPickerPanel.classList.toggle('hidden'));
+    toggleLandingDayPickerBtn.addEventListener('click', () => landingDayPickerPanel.classList.toggle('hidden'));
+    toggleAircraftSelectorBtn.addEventListener('click', () => aircraftSelectorPanel.classList.toggle('hidden'));
+    toggleLandingAircraftSelectorBtn.addEventListener('click', () => landingAircraftSelectorPanel.classList.toggle('hidden'));
+    toggleCountrySelectorBtn.addEventListener('click', () => countrySelectorPanel.classList.toggle('hidden'));
+
+    function loadDataFromFirebase() {
+      const flightsRef = ref(db, '/');
+      onValue(flightsRef, (snapshot) => {
+        const val = snapshot.val();
+        if (val) {
+          if (Array.isArray(val.flights)) {
+            rawFlights = val.flights.filter(f => f);
+          } else if (val.flights && typeof val.flights === 'object') {
+            rawFlights = Object.values(val.flights);
+          } else {
+            rawFlights = [];
+          }
+
+          airportsData = val.airports || {};
+
+          statusDot.className = "w-2 h-2 rounded-full bg-emerald-500";
+          statusText.innerText = "Sincronizado con Firebase";
+
+          if (!isFiltersInitialized) {
+            setupAircraftFilters();
+            isFiltersInitialized = true;
+          } else {
+            updatePillContainers();
+          }
+
+          setupDateLimits();
+          updateDashboard();
+        } else {
+          statusText.innerText = "Base de datos vacía";
+        }
+      }, (error) => {
+        console.error("Firebase error:", error);
+        statusDot.className = "w-2 h-2 rounded-full bg-rose-500";
+        statusText.innerText = "Error de conexión";
+      });
+    }
+
+    function setupAircraftFilters() {
+      const aircrafts = [...new Set(rawFlights.map(f => f.aircraft).filter(Boolean))].sort();
+      const defaultTargets = ['a320', 'atr72', '737 max', 'b737', 'a320neo'];
+      const defaultSelection = aircrafts.filter(ac => {
+        const lower = ac.toLowerCase();
+        return defaultTargets.some(target => lower.includes(target));
+      });
+
+      const initialAircrafts = defaultSelection.length > 0 ? defaultSelection : aircrafts.slice(0, 3);
+
+      selectedTrendAircrafts = new Set(initialAircrafts);
+      selectedLandingAircrafts = new Set(initialAircrafts);
+
+      updatePillContainers();
+    }
+
+    function updatePillContainers() {
+      const aircrafts = [...new Set(rawFlights.map(f => f.aircraft).filter(Boolean))].sort();
+      renderAircraftPills(aircraftTrendPillContainer, aircrafts, selectedTrendAircrafts, () => {
+        renderChartAircraftUsageTrend(getSortedFlights());
+      });
+      renderAircraftPills(landingTrendPillContainer, aircrafts, selectedLandingAircrafts, () => {
+        renderChartLandingRateTrend(getSortedFlights());
+      });
+    }
+
+    function renderAircraftPills(container, aircrafts, selectedSet, onChangeCallback) {
+      container.innerHTML = '';
+      aircrafts.forEach((ac, idx) => {
+        const isSelected = selectedSet.has(ac);
+        const color = COLOR_PALETTE[idx % COLOR_PALETTE.length];
+
+        const pill = document.createElement('button');
+        pill.type = "button";
+        pill.className = isSelected 
+          ? "px-3 py-1.5 rounded-full text-xs font-medium border transition flex items-center gap-2 bg-zinc-100 text-zinc-950 border-zinc-100 shadow-sm"
+          : "px-3 py-1.5 rounded-full text-xs font-medium border transition flex items-center gap-2 bg-zinc-950/60 text-zinc-500 border-zinc-800 hover:border-zinc-700 hover:text-zinc-300";
+
+        const indicator = document.createElement('span');
+        indicator.className = "w-2 h-2 rounded-full";
+        indicator.style.backgroundColor = isSelected ? color : '#52525b';
+
+        pill.appendChild(indicator);
+        pill.appendChild(document.createTextNode(ac));
+
+        pill.addEventListener('click', () => {
+          if (selectedSet.has(ac)) selectedSet.delete(ac);
+          else selectedSet.add(ac);
+          renderAircraftPills(container, aircrafts, selectedSet, onChangeCallback);
+          onChangeCallback();
+        });
+
+        container.appendChild(pill);
+      });
+    }
+
+    document.getElementById('selectAllAircraftTrendBtn').addEventListener('click', () => {
+      selectedTrendAircrafts = new Set([...new Set(rawFlights.map(f => f.aircraft).filter(Boolean))]);
+      updatePillContainers();
+      renderChartAircraftUsageTrend(getSortedFlights());
+    });
+    document.getElementById('deselectAllAircraftTrendBtn').addEventListener('click', () => {
+      selectedTrendAircrafts.clear();
+      updatePillContainers();
+      renderChartAircraftUsageTrend(getSortedFlights());
+    });
+    document.getElementById('selectAllLandingTrendBtn').addEventListener('click', () => {
+      selectedLandingAircrafts = new Set([...new Set(rawFlights.map(f => f.aircraft).filter(Boolean))]);
+      updatePillContainers();
+      renderChartLandingRateTrend(getSortedFlights());
+    });
+    document.getElementById('deselectAllLandingTrendBtn').addEventListener('click', () => {
+      selectedLandingAircrafts.clear();
+      updatePillContainers();
+      renderChartLandingRateTrend(getSortedFlights());
+    });
+
+    function setupDateLimits() {
+      const dates = rawFlights.map(f => f.date).filter(Boolean).sort();
+      if (dates.length > 0) {
+        minDateAvailable = dates[0];
+        maxDateAvailable = dates[dates.length - 1];
+        minMonthAvailable = minDateAvailable.substring(0, 7);
+        maxMonthAvailable = maxDateAvailable.substring(0, 7);
+
+        const dateInputs = [
+          dayStartInput, dayEndInput,
+          flightsDayStartInput, flightsDayEndInput,
+          aircraftDayStartInput, aircraftDayEndInput,
+          landingDayStartInput, landingDayEndInput
+        ];
+
+        dateInputs.forEach(input => {
+          input.min = minDateAvailable;
+          input.max = maxDateAvailable;
+          if (!input.value) {
+            if (input.id.includes('Start')) input.value = minDateAvailable;
+            if (input.id.includes('End')) input.value = maxDateAvailable;
+          }
+        });
+
+        monthStartInput.min = minMonthAvailable;
+        monthStartInput.max = maxMonthAvailable;
+        monthEndInput.min = minMonthAvailable;
+        monthEndInput.max = maxMonthAvailable;
+        if (!monthStartInput.value) monthStartInput.value = minMonthAvailable;
+        if (!monthEndInput.value) monthEndInput.value = maxMonthAvailable;
+      }
+    }
+
+    function getSortedFlights() {
+      return [...rawFlights].filter(Boolean).sort((a, b) => new Date(a.date) - new Date(b.date));
+    }
+
+    function updateDashboard() {
+      const flights = getSortedFlights();
+      renderChartHoursPerDay(flights);
+      renderChartHoursPerMonth(flights);
+      renderChartFlightsPerDay(flights);
+      renderChartFlightsByAirline(flights);
+      renderChartAircraftUsageTrend(flights);
+      renderChartLandingRateTrend(flights);
+      renderChartFlightsByCountry(flights);
+      renderChartTopCountriesPerAircraft(flights);
+    }
+
+    function createChart(id, config) {
+      if (chartInstances[id]) chartInstances[id].destroy();
+      const ctx = document.getElementById(id).getContext('2d');
+      chartInstances[id] = new Chart(ctx, config);
+    }
+
+    function renderChartHoursPerDay(flights) {
+      const dayHoursMap = {};
+      const start = dayStartInput.value || minDateAvailable;
+      const end = dayEndInput.value || maxDateAvailable;
+
+      flights.forEach(f => {
+        if (!f.date || (start && f.date < start) || (end && f.date > end)) return;
+        const total = (parseInt(f.hours || 0)) + (parseInt(f.minutes || 0) / 60);
+        dayHoursMap[f.date] = (dayHoursMap[f.date] || 0) + total;
+      });
+
+      const labels = Object.keys(dayHoursMap).sort();
+      const data = labels.map(l => dayHoursMap[l].toFixed(2));
+
+      createChart('chartHoursPerDay', {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Horas', data, backgroundColor: '#f4f4f5', borderRadius: 4 }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => ` Tiempo: ${formatDecimalHours(ctx.raw)}` } } },
+          scales: { y: { beginAtZero: true, grid: { color: '#27272a' } }, x: { grid: { display: false } } }
+        }
+      });
+    }
+
+    function renderChartHoursPerMonth(flights) {
+      const monthHoursMap = {};
+      const startM = monthStartInput.value || minMonthAvailable;
+      const endM = monthEndInput.value || maxMonthAvailable;
+
+      flights.forEach(f => {
+        if (!f.date) return;
+        const month = f.date.substring(0, 7);
+        if ((startM && month < startM) || (endM && month > endM)) return;
+        const total = (parseInt(f.hours || 0)) + (parseInt(f.minutes || 0) / 60);
+        monthHoursMap[month] = (monthHoursMap[month] || 0) + total;
+      });
+
+      const labels = Object.keys(monthHoursMap).sort();
+      const data = labels.map(l => monthHoursMap[l].toFixed(2));
+
+      createChart('chartHoursPerMonth', {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Horas', data, backgroundColor: '#a1a1aa', borderRadius: 4 }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => ` Tiempo: ${formatDecimalHours(ctx.raw)}` } } },
+          scales: { y: { beginAtZero: true, grid: { color: '#27272a' } }, x: { grid: { display: false } } }
+        }
+      });
+    }
+
+    function renderChartFlightsPerDay(flights) {
+      const dayFlightsMap = {};
+      const start = flightsDayStartInput.value || minDateAvailable;
+      const end = flightsDayEndInput.value || maxDateAvailable;
+
+      flights.forEach(f => {
+        if (!f.date || (start && f.date < start) || (end && f.date > end)) return;
+        dayFlightsMap[f.date] = (dayFlightsMap[f.date] || 0) + 1;
+      });
+
+      const labels = Object.keys(dayFlightsMap).sort();
+      const data = labels.map(l => dayFlightsMap[l]);
+
+      createChart('chartFlightsPerDay', {
+        type: 'line',
+        data: { labels, datasets: [{ label: 'Vuelos', data, borderColor: '#ffffff', backgroundColor: 'rgba(255, 255, 255, 0.05)', fill: true, tension: 0.2, pointBackgroundColor: '#ffffff' }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#27272a' } }, x: { grid: { display: false } } }
+        }
+      });
+    }
+
+    function renderChartFlightsByAirline(flights) {
+      const airlineMap = {};
+      flights.forEach(f => {
+        const name = (f.airline && f.airline.name) ? f.airline.name : 'Sin Aerolínea / Privado';
+        airlineMap[name] = (airlineMap[name] || 0) + 1;
+      });
+
+      const sortedEntries = Object.entries(airlineMap).sort((a, b) => b[1] - a[1]);
+      createChart('chartFlightsByAirline', {
+        type: 'doughnut',
+        data: {
+          labels: sortedEntries.map(e => e[0]),
+          datasets: [{ data: sortedEntries.map(e => e[1]), backgroundColor: COLOR_PALETTE, borderColor: '#18181b', borderWidth: 2 }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#d4d4d8', boxWidth: 12 } } } }
+      });
+    }
+
+    function renderChartAircraftUsageTrend(flights) {
+      const start = aircraftDayStartInput.value || minDateAvailable;
+      const end = aircraftDayEndInput.value || maxDateAvailable;
+      const filteredFlights = flights.filter(f => f.date && (!start || f.date >= start) && (!end || f.date <= end));
+
+      const dates = [...new Set(filteredFlights.map(f => f.date))].sort();
+      const allAircrafts = [...new Set(rawFlights.map(f => f.aircraft).filter(Boolean))].sort();
+      const aircrafts = [...selectedTrendAircrafts];
+
+      const datasets = aircrafts.map((ac) => {
+        const idx = allAircrafts.indexOf(ac);
+        let cumulativeCount = 0;
+        const data = dates.map(date => {
+          cumulativeCount += filteredFlights.filter(f => f.date === date && f.aircraft === ac).length;
+          return cumulativeCount;
+        });
+        return { label: ac, data, borderColor: COLOR_PALETTE[idx >= 0 ? idx % COLOR_PALETTE.length : 0], backgroundColor: 'transparent', tension: 0.3, borderWidth: 2.5, pointRadius: 3 };
+      });
+
+      createChart('chartAircraftUsageTrend', {
+        type: 'line',
+        data: { labels: dates, datasets },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { color: '#d4d4d8', boxWidth: 12 } } }, scales: { y: { beginAtZero: true, grid: { color: '#27272a' } }, x: { grid: { display: false } } } }
+      });
+    }
+
+    function renderChartLandingRateTrend(flights) {
+      const start = landingDayStartInput.value || minDateAvailable;
+      const end = landingDayEndInput.value || maxDateAvailable;
+      const filteredFlights = flights.filter(f => f.date && (!start || f.date >= start) && (!end || f.date <= end));
+
+      const flightsWithLanding = filteredFlights.filter(f => parseLandingRate(f.landingRate) !== null && selectedLandingAircrafts.has(f.aircraft));
+
+      if (flightsWithLanding.length > 0) {
+        const totalScore = flightsWithLanding.reduce((acc, f) => acc + parseLandingRate(f.landingRate), 0);
+        avgLandingBadge.innerText = `${(totalScore / flightsWithLanding.length).toFixed(2)} / 10`;
+      } else {
+        avgLandingBadge.innerText = `-- / 10`;
+      }
+
+      const dates = [...new Set(flightsWithLanding.map(f => f.date))].sort();
+      const allAircrafts = [...new Set(rawFlights.map(f => f.aircraft).filter(Boolean))].sort();
+      const aircrafts = [...selectedLandingAircrafts];
+
+      const datasets = aircrafts.map((ac) => {
+        const idx = allAircrafts.indexOf(ac);
+        const data = dates.map(date => {
+          const matches = flightsWithLanding.filter(f => f.date === date && f.aircraft === ac);
+          if (matches.length === 0) return null;
+          return (matches.reduce((acc, f) => acc + parseLandingRate(f.landingRate), 0) / matches.length).toFixed(2);
+        });
+        return { label: ac, data, borderColor: COLOR_PALETTE[idx >= 0 ? idx % COLOR_PALETTE.length : 0], backgroundColor: COLOR_PALETTE[idx >= 0 ? idx % COLOR_PALETTE.length : 0], spanGaps: true, tension: 0.2, borderWidth: 2.5, pointRadius: 4 };
+      });
+
+      createChart('chartLandingRateTrend', {
+        type: 'line',
+        data: { labels: dates, datasets },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { color: '#d4d4d8', boxWidth: 12 } } }, scales: { y: { min: 0, max: 10, grid: { color: '#27272a' } }, x: { grid: { display: false } } } }
+      });
+    }
+
+    // =========================================================================
+    // GRÁFICA 7: Total de vuelos por País (Top 10 por defecto + Desplegable Extra)
+    // =========================================================================
+    function renderChartFlightsByCountry(flights) {
+      const countryCounts = {};
+
+      flights.forEach(f => {
+        const originIcao = f.origin ? f.origin.trim().toUpperCase() : '';
+        const destIcao = f.dest ? f.dest.trim().toUpperCase() : '';
+
+        const cDep = originIcao ? getCountryFromICAO(originIcao) : null;
+        const cArr = destIcao ? getCountryFromICAO(destIcao) : null;
+
+        if (cDep && cArr) {
+          if (cDep === cArr) {
+            countryCounts[cDep] = (countryCounts[cDep] || 0) + 1;
+          } else {
+            countryCounts[cDep] = (countryCounts[cDep] || 0) + 1;
+            countryCounts[cArr] = (countryCounts[cArr] || 0) + 1;
+          }
+        } else if (cDep) {
+          countryCounts[cDep] = (countryCounts[cDep] || 0) + 1;
+        } else if (cArr) {
+          countryCounts[cArr] = (countryCounts[cArr] || 0) + 1;
+        }
+      });
+
+      const sortedEntries = Object.entries(countryCounts).sort((a, b) => b[1] - a[1]);
+      
+      const top10 = sortedEntries.slice(0, 10);
+      const top10CountryNames = new Set(top10.map(e => e[0]));
+
+      const extraCountriesAvailable = sortedEntries.slice(10);
+
+      renderExtraCountryPills(extraCountriesAvailable);
+
+      const finalEntries = sortedEntries.filter(([country, count]) => {
+        return top10CountryNames.has(country) || selectedExtraCountries.has(country);
+      });
+
+      const labels = finalEntries.map(e => e[0]);
+      const data = finalEntries.map(e => e[1]);
+
+      createChart('chartFlightsByCountry', {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{ label: 'Operaciones', data, backgroundColor: '#e4e4e7', borderRadius: 4 }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => ` Operaciones: ${ctx.raw}` } } },
+          scales: { y: { beginAtZero: true, grid: { color: '#27272a' } }, x: { grid: { display: false } } }
+        }
+      });
+    }
+
+    function renderExtraCountryPills(extraList) {
+      countryExtraPillContainer.innerHTML = '';
+      if (extraList.length === 0) {
+        countryExtraPillContainer.innerHTML = '<span class="text-zinc-500 italic">No hay más países adicionales disponibles.</span>';
+        return;
+      }
+
+      extraList.forEach(([country, count]) => {
+        const isSelected = selectedExtraCountries.has(country);
+        const pill = document.createElement('button');
+        pill.type = "button";
+        pill.className = isSelected 
+          ? "px-3 py-1.5 rounded-full text-xs font-medium border transition flex items-center gap-2 bg-zinc-100 text-zinc-950 border-zinc-100 shadow-sm"
+          : "px-3 py-1.5 rounded-full text-xs font-medium border transition flex items-center gap-2 bg-zinc-950/60 text-zinc-500 border-zinc-800 hover:border-zinc-700 hover:text-zinc-300";
+
+        const indicator = document.createElement('span');
+        indicator.className = "w-2 h-2 rounded-full";
+        indicator.style.backgroundColor = isSelected ? '#18181b' : '#52525b';
+
+        pill.appendChild(indicator);
+        pill.appendChild(document.createTextNode(`${country} (${count})`));
+
+        pill.addEventListener('click', () => {
+          if (selectedExtraCountries.has(country)) {
+            selectedExtraCountries.delete(country);
+          } else {
+            selectedExtraCountries.add(country);
+          }
+          renderChartFlightsByCountry(getSortedFlights());
+        });
+
+        countryExtraPillContainer.appendChild(pill);
+      });
+    }
+
+    document.getElementById('selectAllExtraCountriesBtn').addEventListener('click', () => {
+      const countryCounts = {};
+      getSortedFlights().forEach(f => {
+        const originIcao = f.origin ? f.origin.trim().toUpperCase() : '';
+        const destIcao = f.dest ? f.dest.trim().toUpperCase() : '';
+
+        const cDep = originIcao ? getCountryFromICAO(originIcao) : null;
+        const cArr = destIcao ? getCountryFromICAO(destIcao) : null;
+
+        if (cDep && cArr) {
+          if (cDep === cArr) {
+            countryCounts[cDep] = (countryCounts[cDep] || 0) + 1;
+          } else {
+            countryCounts[cDep] = (countryCounts[cDep] || 0) + 1;
+            countryCounts[cArr] = (countryCounts[cArr] || 0) + 1;
+          }
+        } else if (cDep) {
+          countryCounts[cDep] = (countryCounts[cDep] || 0) + 1;
+        } else if (cArr) {
+          countryCounts[cArr] = (countryCounts[cArr] || 0) + 1;
+        }
+      });
+      const sorted = Object.entries(countryCounts).sort((a, b) => b[1] - a[1]);
+      const extras = sorted.slice(10).map(e => e[0]);
+      selectedExtraCountries = new Set(extras);
+      renderChartFlightsByCountry(getSortedFlights());
+    });
+
+    document.getElementById('deselectAllExtraCountriesBtn').addEventListener('click', () => {
+      selectedExtraCountries.clear();
+      renderChartFlightsByCountry(getSortedFlights());
+    });
+
+    // =========================================================================
+    // GRÁFICA 8: Top 3 Países por Aeronave (Filtrada estrictamente para A320, A321, ATR42, ATR72, B737)
+    // =========================================================================
+    function renderChartTopCountriesPerAircraft(flights) {
+      const aircraftCountryMap = {};
+      const allowedAircrafts = ['a320', 'a321', 'atr42', 'atr72', 'b737'];
+
+      flights.forEach(f => {
+        const ac = f.aircraft;
+        if (!ac) return;
+        
+        const acLower = ac.toLowerCase();
+        const isAllowed = allowedAircrafts.some(target => acLower === target || acLower.includes(target));
+        if (!isAllowed) return;
+
+        if (!aircraftCountryMap[ac]) aircraftCountryMap[ac] = {};
+
+        const originIcao = f.origin ? f.origin.trim().toUpperCase() : '';
+        const destIcao = f.dest ? f.dest.trim().toUpperCase() : '';
+
+        const cDep = originIcao ? getCountryFromICAO(originIcao) : null;
+        const cArr = destIcao ? getCountryFromICAO(destIcao) : null;
+
+        if (cDep && cArr) {
+          if (cDep === cArr) {
+            aircraftCountryMap[ac][cDep] = (aircraftCountryMap[ac][cDep] || 0) + 1;
+          } else {
+            aircraftCountryMap[ac][cDep] = (aircraftCountryMap[ac][cDep] || 0) + 1;
+            aircraftCountryMap[ac][cArr] = (aircraftCountryMap[ac][cArr] || 0) + 1;
+          }
+        } else if (cDep) {
+          aircraftCountryMap[ac][cDep] = (aircraftCountryMap[ac][cDep] || 0) + 1;
+        } else if (cArr) {
+          aircraftCountryMap[ac][cArr] = (aircraftCountryMap[ac][cArr] || 0) + 1;
+        }
+      });
+
+      const aircrafts = Object.keys(aircraftCountryMap).sort();
+      const top1Data = [], top2Data = [], top3Data = [];
+      const top1Labels = [], top2Labels = [], top3Labels = [];
+
+      aircrafts.forEach(ac => {
+        const sortedCountries = Object.entries(aircraftCountryMap[ac]).sort((a, b) => b[1] - a[1]);
+
+        top1Data.push(sortedCountries[0] ? sortedCountries[0][1] : 0);
+        top1Labels.push(sortedCountries[0] ? sortedCountries[0][0] : 'N/A');
+
+        top2Data.push(sortedCountries[1] ? sortedCountries[1][1] : 0);
+        top2Labels.push(sortedCountries[1] ? sortedCountries[1][0] : 'N/A');
+
+        top3Data.push(sortedCountries[2] ? sortedCountries[2][1] : 0);
+        top3Labels.push(sortedCountries[2] ? sortedCountries[2][0] : 'N/A');
+      });
+
+      createChart('chartTopCountriesPerAircraft', {
+        type: 'bar',
+        data: {
+          labels: aircrafts,
+          datasets: [
+            { label: '1º País más frecuentado', data: top1Data, backgroundColor: '#ffffff', borderRadius: 4, customCountryNames: top1Labels },
+            { label: '2º País más frecuentado', data: top2Data, backgroundColor: '#a1a1aa', borderRadius: 4, customCountryNames: top2Labels },
+            { label: '3º País más frecuentado', data: top3Data, backgroundColor: '#52525b', borderRadius: 4, customCountryNames: top3Labels }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top', labels: { color: '#d4d4d8', boxWidth: 12 } },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  const countryName = ctx.dataset.customCountryNames[ctx.dataIndex];
+                  return ` ${ctx.dataset.label}: ${countryName} (${ctx.raw} ops)`;
+                }
+              }
+            }
+          },
+          scales: { y: { beginAtZero: true, grid: { color: '#27272a' } }, x: { grid: { display: false } } }
+        }
+      });
+    }
+
+    dayStartInput.addEventListener('change', () => renderChartHoursPerDay(getSortedFlights()));
+    dayEndInput.addEventListener('change', () => renderChartHoursPerDay(getSortedFlights()));
+    resetDayFilterBtn.addEventListener('click', () => { dayStartInput.value = minDateAvailable; dayEndInput.value = maxDateAvailable; renderChartHoursPerDay(getSortedFlights()); });
+
+    flightsDayStartInput.addEventListener('change', () => renderChartFlightsPerDay(getSortedFlights()));
+    flightsDayEndInput.addEventListener('change', () => renderChartFlightsPerDay(getSortedFlights()));
+    resetFlightsDayFilterBtn.addEventListener('click', () => { flightsDayStartInput.value = minDateAvailable; flightsDayEndInput.value = maxDateAvailable; renderChartFlightsPerDay(getSortedFlights()); });
+
+    aircraftDayStartInput.addEventListener('change', () => renderChartAircraftUsageTrend(getSortedFlights()));
+    aircraftDayEndInput.addEventListener('change', () => renderChartAircraftUsageTrend(getSortedFlights()));
+    resetAircraftDayFilterBtn.addEventListener('click', () => { aircraftDayStartInput.value = minDateAvailable; aircraftDayEndInput.value = maxDateAvailable; renderChartAircraftUsageTrend(getSortedFlights()); });
+
+    landingDayStartInput.addEventListener('change', () => renderChartLandingRateTrend(getSortedFlights()));
+    landingDayEndInput.addEventListener('change', () => renderChartLandingRateTrend(getSortedFlights()));
+    resetLandingDayFilterBtn.addEventListener('click', () => { landingDayStartInput.value = minDateAvailable; landingDayEndInput.value = maxDateAvailable; renderChartLandingRateTrend(getSortedFlights()); });
+
+    monthStartInput.addEventListener('change', () => renderChartHoursPerMonth(getSortedFlights()));
+    monthEndInput.addEventListener('change', () => renderChartHoursPerMonth(getSortedFlights()));
+    resetMonthFilterBtn.addEventListener('click', () => { monthStartInput.value = minMonthAvailable; monthStartInput.value = maxMonthAvailable; renderChartHoursPerMonth(getSortedFlights()); });
+
+    document.getElementById('reloadBtn').addEventListener('click', loadDataFromFirebase);
+
+    loadDataFromFirebase();
+  </script>
+</body>
+</html>
